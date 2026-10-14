@@ -29,7 +29,7 @@ def to_watt(valueFromCSV):
 # Reads the heatpump-files and makes the date readable for python
 def read_heatpump_data(fileName):
     hpd = pd.read_csv(fileName) # Reading the .csv file
-    hpd.columns = ["time", "power_w"] # Changing the name of the columns from "Time" to "time" and "W.mean { entity_id: 03a_kjokken_3p_230vl_active_power }" to "power_w"
+    hpd.columns = ["time", "power_w"] # Changing the name of the columns from "Time" to "time" and "W.mean { entity_id: 11_varmepumpe32a_active_power }" to "power_w"
     hpd["time"] = pd.to_datetime(hpd["time"])
     hpd["power_w"] = hpd["power_w"].apply(to_watt).abs() # apply(to_watt) makes every value to correct format, abs() makes every value positive
     return hpd
