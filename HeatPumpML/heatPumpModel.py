@@ -5,34 +5,60 @@ from sklearn.metrics import mean_absolute_error, r2_score  # måle modellen
 
 
 
-# leser vp filene
-varmepumpe_1 = pd.read_csv("dataforheatpumpML/HeatPump_Jan-Jun2025.csv")
-varmepumpe_2 = pd.read_csv("dataforheatpumpML/HeatPump_Jul-Dec2025.csv")
-# kombinerer
-varmepumpe = pd.concat([varmepumpe_1, varmepumpe_2])
+"""
+Data is like this:
+2024-11-01 07:00:00,500 mW
+2024-11-01 13:00:00,1.13 kW
+2024-11-01 19:00:00,1.17 W
 
-# henter temperatur data
-temperatur = pd.read_csv("dataforheatpumpML/eksempel_oslo_temperatur_timefortime.csv")
-
-
-# gjør "unavaible" til NaN i dataen
-varmepumpe["forbruk"] = pd.to_numeric(varmepumpe["state"], errors="coerce")
-
-# Gjør dato leslig
-varmepumpe["tid"] = pd.to_datetime(varmepumpe["last_changed"], utc=True)
-# Fjerner UTC på enden
-varmepumpe["tid"] = varmepumpe["tid"].dt.tz_localize(None)
-
-
-# Runder ned til timen
-varmepumpe["tid"] = varmepumpe["tid"].dt.floor("h")
-# fjerner rader uten forbruk (ingenting å lære fra, derfor unødvendig)
-varmepumpe = varmepumpe.dropna(subset=["forbruk"])
-# pga runder ned til timen, tar gjennomsnitt dersom samme tid på målingene
-varmepumpe = varmepumpe.groupby("tid")["forbruk"].mean().reset_index()
+So we must remove mW, kW and W and change the value to numbers without prefixes. 
+500 mW --> 0.5  
+1.13 kW --> 1130
+1.17 W --> 1.17
+"""
+def to_watt(valueFromCSV):
+    number, unit = valueFromCSV.split()
+    number = float(number)
+    if unit == "kW":
+        number *= 1000
+    elif unit == "mW":
+        number *= 0.001
+    return number
 
 
+# Reads the heatpump-files and makes the date readable for python
+def read_heatpump_data(fileName):
+    hpd = pd.read_csv(fileName) # Reading the .csv file
+    hpd.columns = ["time", "power_w"] # Changing the name of the columns from "Time" to "time" and "W.mean { entity_id: 03a_kjokken_3p_230vl_active_power }" to "power_w"
+    hpd["time"] = pd.to_datetime(hpd["time"])
+    hpd["power_w"] = hpd["power_w"].apply(to_watt).abs() # apply(to_watt) makes every value to correct format, abs() makes every value positive
+    return hpd
+heatpumpData_1 = read_heatpump_data("heatpumpData2024_02_18_to_2024_10_30.csv")
+heatpumpData_2 = read_heatpump_data("heatpumpData2024_10_31_to_2026_10_13.csv")
 
+
+# Combines the 2 heatpumpdata's
+heatpumpData = pd.concat([heatpumpData_1, heatpumpData_2], ignore_index=True)
+# Sorts the data based on time
+heatpumpData = heatpumpData.sort_values("time").reset_index(drop=True)
+
+
+
+# Reads the temperature data
+temperatureData = pd.read_csv(
+    "../TemperatureData/temperature_BlindernOslo_2024_02_18_to_2026_10_13.csv", 
+    sep=";", 
+    decimal=",", 
+    usecols=["Tid(norsk normaltid)", "Lufttemperatur"],
+)
+temperatureData.columns = ["time", "temperature"]
+temperatureData["time"] = pd.to_datetime(temperatureData["time"], format="%d.%m.%Y %H:%M")
+
+
+
+
+
+"""
 temperatur["tid"] = pd.to_datetime(temperatur["Tidspunkt (UTC)"])
 # Fjerner unødvendige data
 temperatur = temperatur[["tid", "Verdi (C)"]]
@@ -92,3 +118,4 @@ ny_predict = pd.DataFrame({
  
 predicted_forbruk = modell.predict(ny_predict)
 print(f"predicted usage: {predicted_forbruk[0]:.0f} Watt")
+"""
