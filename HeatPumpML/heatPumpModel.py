@@ -56,66 +56,69 @@ temperatureData["time"] = pd.to_datetime(temperatureData["time"], format="%d.%m.
 
 
 
+# Combines temperature data with heatpump data grouped by date and time
+data = pd.merge(heatpumpData, temperatureData, on="time")
+print("Amount rows:", len(data))
 
 
-"""
-temperatur["tid"] = pd.to_datetime(temperatur["Tidspunkt (UTC)"])
-# Fjerner unødvendige data
-temperatur = temperatur[["tid", "Verdi (C)"]]
+# Removes data between 2025-07-16 and 2025-10-04 because no data recorded
+bad_period = (data["time"] >= "2025-07-10") & (data["time"] < "2025-10-05")
+data = data[~bad_period].reset_index(drop=True)
+print("New amount rows:", len(data))
 
 
-#slår sammen dataene
-data = pd.merge(varmepumpe, temperatur, on="tid")
-print("Antall rader:", len(data))
+# Format the data for the Model (Machine learning)
+data["hour"] = data["time"].dt.hour # 0-23
+data["weekDay"] = data["time"].dt.dayofweek # 0=manday, 6=tuesday
+data["month"] = data["time"].dt.month # 1-12
 
 
 
-#gjør dato og time til features
-data["time"] = data["tid"].dt.hour # 0-23
-data["ukedag"] = data["tid"].dt.dayofweek # 0=mandag, 6=søndag
-data["maaned"] = data["tid"].dt.month # 1-12
+# inputs for the Model
+X = data[["temperature", "hour", "weekDay", "month"]]
+# what the Model is gonna predict, which is usage of heatpump in Watt
+y = data["power_w"]
 
 
-# inputs
-X = data[["Verdi (C)", "time", "ukedag", "maaned"]]
-# prediksjon
-y = data["forbruk"]
 
-
-# Deler opp treningsdata og test data 80/20
+# Splits the data into learning data and verify data (verify data is used to check how good the model, see r2 score)
 X_trening, X_test, y_trening, y_test = train_test_split(
     X, y, test_size=0.2, random_state=None
 )
 
 
 
-
-modell = RandomForestRegressor(n_estimators=100, random_state=None)
-modell.fit(X_trening, y_trening)
-
-
+# Machine learning
+model = RandomForestRegressor(n_estimators=100, random_state=None)
+model.fit(X_trening, y_trening)
 
 
-#tester på modellen
-gjetninger = modell.predict(X_test)
-feil = mean_absolute_error(y_test, gjetninger)
 
 
-r2 = r2_score(y_test, gjetninger)
- 
-print(f"Gjennomsnitt feil: {feil:.0f} Watt")
+# Testing the model
+guesses = model.predict(X_test)
+mean_errors_power_W = mean_absolute_error(y_test, guesses)
+
+# Getting the r2 score
+r2 = r2_score(y_test, guesses)
+
+
+# Prints out r2 score and average error
+print(f"Average error: {mean_errors_power_W:.0f} Watt")
 print(f"R2-score: {r2:.2f}")
  
  
 
-
-ny_predict = pd.DataFrame({
-    "Verdi (C)": [-10],
-    "time": [18],
-    "ukedag": [0],
-    "maaned": [1],
+# Predict the Watt usage of the heatpump decided date, hour and temperature outside and the Model
+new_predict = pd.DataFrame({
+    "temperature": [-10],
+    "hour": [18],
+    "weekDay": [0],
+    "month": [1],
 })
- 
-predicted_forbruk = modell.predict(ny_predict)
-print(f"predicted usage: {predicted_forbruk[0]:.0f} Watt")
-"""
+
+# Using the model to predict
+predicted_usage = model.predict(new_predict)
+
+# Prints out what the Model predicted
+print(f"predicted usage: {predicted_usage[0]:.0f} Watt")
