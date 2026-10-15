@@ -41,8 +41,8 @@ carChargeData = carChargeData[~bad_period]
 # Makes a new column that calculates Watt to Watt-hour for each data
 carChargeData["energy_kWh"] = carChargeData["charge_usage"] * 12 / 1000
 
-# Where the charge_usage is less than 500, we say that the car isnt charging
-carChargeData.loc[carChargeData["charge_usage"] < 500, "energy_kWh"] = 0
+# Where the charge_usage is less than 500, we say that the car isnt charging, makes the Watt value 0
+carChargeData.loc[carChargeData["charge_usage"] <500, "energy_kWh"] = 0
 
 
 # Makes a new column where it only includes the date
@@ -78,7 +78,7 @@ X = daily[["weekday", "month"]]
 y = daily["energy_kWh"]
 
 # split up the data into test and train 80% and 20%
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=None)
 
 # Model
 model = GradientBoostingRegressor(n_estimators=100, max_depth=2, learning_rate=0.05, random_state=42)
