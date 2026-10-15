@@ -83,7 +83,7 @@ y = data["power_w"]
 
 # Splits the data into learning data and verify data (verify data is used to check how good the model, see r2 score)
 X_trening, X_test, y_trening, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=None
+    X, y, test_size=0.2, random_state=78 #78
 )
 
 
