@@ -1,11 +1,10 @@
+import sys
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
-
 
 
 def to_watt(valueFromCSV):
+    if pd.isna(valueFromCSV): # If there is missing data on the timestamp, then it will not 
+        return float("nan")
     number, unit = valueFromCSV.split()
     number = float(number)
     if unit == "kW":
@@ -15,81 +14,142 @@ def to_watt(valueFromCSV):
     return number
 
 
-# Reads the carChargingUsage-file and makes the date readable for python
 def read_carCharge_data(fileName):
-    ccd = pd.read_csv(fileName) # Reading the .csv file
-    ccd.columns = ["time", "charge_usage"] # Changing the name of the columns from "Time" to "time" and "W.mean { entity_id: u05_billader16a_active_power }" to "charge_usage"
+    ccd = pd.read_csv(fileName)
+    ccd.columns = ["time", "charge_usage"]
     ccd["time"] = pd.to_datetime(ccd["time"])
-    ccd["charge_usage"] = ccd["charge_usage"].apply(to_watt).abs() # apply(to_watt) makes every value to correct format, abs() makes every value positive
+    ccd["charge_usage"] = ccd["charge_usage"].apply(to_watt).abs()
     return ccd
 
+# Reads the file
+carChargeData = read_carCharge_data("Appliances-data-2026-10-26 00_14_33.csv")
 
-# Reading in data
-carChargeData = read_carCharge_data("carChargeData_2024_02_23_to_2026_10_13.csv")
-
-# Removes row/data if either charge_usage_data is missing or date/time is missing
-carChargeData = carChargeData.dropna()
-
+# Sorts the data based on time and remove duplicates
+carChargeData = carChargeData.sort_values("time").drop_duplicates("time")
 
 
-# Removes the data where the charging wasnt recorded
-bad_period = (carChargeData["time"] >= "2025-07-16") & (carChargeData["time"] < "2025-10-05")
-carChargeData = carChargeData[~bad_period]
+# There was missing hours in the data, for example:
+# 11:00 3kW
+# 14:00 2kW
+# This code adds the missing data like this:
+# 11:00 3kW
+# 12:00 NaN
+# 13:00 NaN
+# 14:00 2kW
+all_hours = pd.date_range(carChargeData["time"].min(), carChargeData["time"].max(), freq="h")
+power = carChargeData.set_index("time")["charge_usage"].reindex(all_hours)
+# We do this because we will see 11:00 and 14:00 as 1 charge session, even when its 2 hours gap between them
+
+# Set data to NaN on the period when there was no charging recorded
+power[(power.index >= "2025-07-16") & (power.index < "2025-10-05")] = float("nan")
+
+print(f"max: {power.max():.0f} W")
+
+CHARGING_THRESHOLD_W = 1000
+MAX_GAP_H = 2 # Gap inside 1 hour still counts as same session, over 1 hour makes a different charging session
+
+charging = power[power > CHARGING_THRESHOLD_W] # Keeps only the data where charging is over 1 kW
+session_id = (charging.index.to_series().diff() > pd.Timedelta(hours=MAX_GAP_H)).cumsum() # .diff() checks how long ago was last charging, then > checks if the time from last charging was over 2 hours, then if it is, consum() increase the count, which puts the session ID
+"""                 charging session ID
+18:00         -           0
+19:00         1 h         0
+20:00         1 h         0
+09:00        13 h         1
+10:00         1 h         1
+"""
+
+rows = []
+one_h = pd.Timedelta(hours=1) # Means 1 hour
+for id, hours in charging.groupby(session_id):
+    first, last = hours.index[0], hours.index[-1] # Finds when charging starts and when charging ends, and saves in variables "start" and "last"
+    inside = power[first:last] # makes a new list and adds all charing in kW data for each hour for this specific charging session
+
+    # Skip sessions where we dont know what happened
+    if inside.isna().any():
+        continue
+    if pd.isna(power.get(first - one_h)) or pd.isna(power.get(last + one_h)):
+        continue
+    """
+    we know 17:00 there was no charging, so we know that 18:00 really was start session
+    17:00  0 W
+    18:00  3600 W    <- start
+    19:00  3700 W    <- end
+    20:00  0 W
+
+    If 17:00 was NaN, we dont know if 18:00 really was the start of the session, maybe it was 17:00 or earlier
+    17:00  NaN
+    18:00  3600 W    <- start
+    19:00  3700 W
+    20:00  0 W
+    """
+
+    # Adds session data to the new list
+    rows.append({
+        "start": first,
+        "end": last + one_h, # end of the last charging hour
+        "energy_kWh": inside.sum() / 1000, # W * 1 h / 1000
+        "max_power_W": inside.quantile(0.95),
+    })
+
+# Transform the list to a table and adds column for each data
+sessions = pd.DataFrame(rows)
+sessions["start_hour"] = sessions["start"].dt.hour
+sessions["duration_h"] = (sessions["end"] - sessions["start"]).dt.total_seconds() / 3600
+sessions["avg_power_W"] = sessions["energy_kWh"] * 1000 / sessions["duration_h"]
+sessions["end_hour"] = sessions["start_hour"] + sessions["duration_h"] 
+sessions["weekday"] = sessions["start"].dt.dayofweek
+sessions["month"] = sessions["start"].dt.month
 
 
 
-# Makes a new column that calculates Watt to Watt-hour for each data
-carChargeData["energy_kWh"] = carChargeData["charge_usage"] * 12 / 1000
-
-# Where the charge_usage is less than 500, we say that the car isnt charging, makes the Watt value 0
-carChargeData.loc[carChargeData["charge_usage"] <500, "energy_kWh"] = 0
-
-
-# Makes a new column where it only includes the date
-carChargeData["date"] = carChargeData["time"].dt.date
-
-# Makes a new table where each data is grouped by date, and sums the kWh from them
-daily = carChargeData.groupby("date")["energy_kWh"].sum().reset_index()
-daily["date"] = pd.to_datetime(daily["date"])
-
-# Adds a new column to the table where it tells which day of the week it is, other, the month
-daily["weekday"] = daily["date"].dt.dayofweek
-daily["month"] = daily["date"].dt.month
-
-
-# Adds a new column where it tells if the car has been charging that day
-daily["charged"] = daily["energy_kWh"] > 1
+# Removes small sessions
+sessions = sessions[sessions["energy_kWh"] >= 1].reset_index(drop=True)
 
 
 
-# Makes a new table where there is only data of when the car is charging
-charging_days = daily[daily["charged"]]
-print(f"Percentage of the days charging: {daily["charged"].mean():.0%}")
-print(f"Median amount charging: {charging_days['energy_kWh'].median()} kWh")
-print(f"90% of all charging: {charging_days['energy_kWh'].quantile(0.9):.1f} kWh")
-print("Mean charging for each weekday:")
-print(daily.groupby("weekday")["charged"].mean().round(2))
+print(f"Median start: {sessions['start_hour'].median():.0f}:00, median end: {sessions['end_hour'].median() % 24:.0f}:00")
+print(f"Median duration: {sessions['duration_h'].median():.1f} h, median energy: {sessions['energy_kWh'].median():.1f} kWh")
+print(f"Energy P90: {sessions['energy_kWh'].quantile(0.9):.1f} kWh, charger max power: {sessions['max_power_W'].quantile(0.95):.0f} W")
 
 
 
-# Inputs for the Model
-X = daily[["weekday", "month"]]
-# What we want to predict / correct answers
-y = daily["energy_kWh"]
-
-# split up the data into test and train 80% and 20%
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=None)
-
-# Model
-model = GradientBoostingRegressor(n_estimators=100, max_depth=2, learning_rate=0.05, random_state=42)
-model.fit(X_train, y_train)
+known_per_day = power.notna().groupby(power.index.normalize()).sum() # Find out how much data each day has, for example, monday may have 24 hours data known, while tuesday may have 11 hours of data known
+days = pd.DataFrame({"date": known_per_day[known_per_day >= 22].index})
+days["weekday"] = days["date"].dt.dayofweek
+days["charged"] = days["date"].isin(sessions["start"].dt.normalize())
+print(f"\nDays with (almost) complete data: {len(days)}")
+print("Share of days with a charging session per weekday (0=monday):")
+print(days.groupby("weekday")["charged"].mean().round(2))
 
 
-predictions = model.predict(X_test)
-print(f"\nmean error: {mean_absolute_error(y_test, predictions):.2f} kWh")
-print(f"R2-score: {r2_score(y_test, predictions):.2f}")
+
+sessions["date"] = sessions["start"].dt.normalize()
 
 
-# use the model to predict how much usage of the day
-new_day = pd.DataFrame({"weekday": [2], "month": [3]})
-print(f"Predicted energy: {model.predict(new_day)[0]:.1f} kWh")
+
+profile = sessions.groupby("weekday").agg(
+    sessions=("energy_kWh", "count"),
+    start_hour_median=("start_hour", "median"),
+    start_hour_p25=("start_hour", lambda x: x.quantile(0.25)),
+    start_hour_p75=("start_hour", lambda x: x.quantile(0.75)),
+    duration_h_median=("duration_h", "median"),
+    energy_kWh_median=("energy_kWh", "median"),
+    energy_kWh_p90=("energy_kWh", lambda x: x.quantile(0.9)),
+)
+
+
+profile.insert(0, "share_days_charging", days.groupby("weekday")["charged"].mean())
+profile["end_hour_median"] = profile["start_hour_median"] + profile["duration_h_median"]   # can be > 24
+profile["max_power_W"] = sessions["max_power_W"].quantile(0.95)
+profile.index = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+pd.set_option("display.width", 200)
+pd.set_option("display.max_columns", None)
+print("\nCharging profile per weekday:")
+print(profile.round(2).T)
+
+
+
+profile.round(2).to_csv("charging_profile.csv")
+print("\nSaved to charging_profile.csv")
