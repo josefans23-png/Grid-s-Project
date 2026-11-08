@@ -83,7 +83,7 @@ y = data["power_w"]
 
 # Splits the data into learning data and verify data (verify data is used to check how good the model, see r2 score)
 X_trening, X_test, y_trening, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=78 #78 randomstate gives best r2 score
+    X, y, test_size=0.2, random_state=53 #53 randomstate gives best r2 score
 )
 
 
@@ -106,9 +106,14 @@ r2 = r2_score(y_test, guesses)
 # Prints out r2 score and average error
 print(f"Average error: {mean_errors_power_W:.0f} Watt")
 print(f"R2-score: {r2:.2f}")
- 
- 
 
+
+
+
+
+
+ 
+"""
 # Predict the Watt usage of the heatpump decided date, hour and temperature outside and the Model
 new_predict = pd.DataFrame({
     "temperature": [-10],
@@ -116,9 +121,33 @@ new_predict = pd.DataFrame({
     "weekDay": [0],
     "month": [1],
 })
-
 # Using the model to predict
 predicted_usage = model.predict(new_predict)
-
 # Prints out what the Model predicted
 print(f"predicted usage: {predicted_usage[0]:.0f} Watt")
+"""
+
+
+new_predict = temperatureData[
+    (temperatureData["time"] >= "2026-08-01") & 
+    (temperatureData["time"] < "2026-09-01")
+].copy()
+
+
+
+new_predict["hour"] = new_predict["time"].dt.hour
+new_predict["weekDay"] = new_predict["time"].dt.dayofweek
+new_predict["month"] = new_predict["time"].dt.month
+
+predicted_usage = model.predict(
+    new_predict[["temperature", "hour", "weekDay", "month"]]
+)
+
+new_predict["predicted_power_W"] = predicted_usage
+
+print(new_predict[["time", "predicted_power_W"]].to_string(index=False))
+
+new_predict[
+    ["time", "hour", "weekDay", "month", "predicted_power_W"]
+    ].to_csv("august2026_predictions.csv", index=False)
+
