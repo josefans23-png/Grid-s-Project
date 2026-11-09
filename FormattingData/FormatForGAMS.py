@@ -15,9 +15,12 @@ def hourly_energy(df, name):
     values = df["W.mean"].astype(str).str.strip()
 
     df["W.mean"] = pd.to_numeric(
-        values.str.replace(r"\s*(kW|W)$", "", regex=True),
-        errors="coerce"
+    values.str.replace(r"\s*(kW|W)$", "", regex=True),
+    errors="coerce"
     )
+
+    # Convert kW to W
+    df.loc[values.str.contains(r"kW$", case=False, na=False), "W.mean"] *= 1000
 
     # Assumption: missing values represent zero power
     df["W.mean"] = df["W.mean"].fillna(0)
@@ -57,15 +60,17 @@ data = pd.DataFrame({
     "price": price["price"]
 })
 
-# Approximate other consumption
+data["solar"] = data["solar"].clip(lower=0)
+
 data["otherLoad"] = (
-    data["draw"] + data["solar"] - data["export"]
-)
+    data["draw"] + data["solar"] - data["export"] - data["predicted"]
+).clip(lower=0)
 
 # Check the approximation
 if data.isna().any().any():
     raise ValueError("Some hourly values are missing.")
 
+assert len(data) == 744, "Det må være 744 timer"
 
 # Create GAMS input file
 with open("input.inc", "w") as f:

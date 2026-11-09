@@ -1,10 +1,10 @@
 Sets
-    t /t1*t744/;
+t /t1*t744/;
 * Makes a list of: t1, t2, t3, t4, ...
 
 * Data we have from "input.inc"
 Parameters
-    predicted(t) "Predicted HP Watt consumption (kWh)"
+predicted(t) "Predicted HP Watt consumption (kWh)"
     solar(t) "Solar production (kWh)"
     otherLoad(t) "Other household consumption (kWh)"
     price(t) "Spot price (kr/kWh)";
@@ -21,26 +21,31 @@ Scalar Sstart /5/;
 
 * Always positive variables
 Positive Variables
-    HP(t) "How much electricity Heatpump will use each hour (kWh)"
+HP(t) "How much electricity Heatpump will use each hour (kWh)"
     GridDraw(t) "Electricity imported (kWh)"
     GridExport(t) "Electricity exported (kWh)"
     StoredHeat(t) "Stored energy (kWh)";
 
-Variable
-    TotalImport "Total kWh bought from the power grid for August";
+* Means value either 1 or 0 where 0 means can sell electricty and 1 meant cant
+Binary Variable BuyMode(t);
+
+Variable TotalCost;
 
 Equations
-    Objective "Decides what to minimize"
+Objective "Decides what to minimize"
     EnergyBalance(t) "Bought electricity - Solar electricity = House usage + heatpump - sold electricity from solar"
     FirstHour "Calculates stored heat at first hour"
     HeatBalance(t) "calculates stored heat, for the rest of the hours"
     PowerLimit(t) "Limit the heatpump usage"
     StorageLimit(t) "limits the heat stored"
-    FinalStorage "makes sure enough stored heat for monthly usage";
+    FinalStorage "makes sure enough stored heat for monthly usage"
+    BuyLimit(t)
+    SellLimit(t)
+    ExportLimit(t);
 
 * Minimize electricity imported
 Objective..
-    TotalImport =e= sum(t, GridDraw(t));
+    TotalCost =e= sum(t, GridDraw(t)*0.50 - GridExport(t)*price(t));
 
 * Electricity balance
 EnergyBalance(t)..
@@ -62,6 +67,18 @@ PowerLimit(t)..
 StorageLimit(t)..
     StoredHeat(t) =l= MaxStorage;
 
+*
+ExportLimit(t)..
+    GridExport(t) =l= max(0, solar(t));
+
+*
+BuyLimit(t)..
+    GridDraw(t) =l= 100 * BuyMode(t);
+
+*
+SellLimit(t)..
+    GridExport(t) =l= solar(t) * (1 - BuyMode(t));
+
 * End with at least as much stored energy
 FinalStorage..
     StoredHeat('t744') =g= Sstart;
@@ -70,7 +87,35 @@ FinalStorage..
 Model HeatPump /all/;
 
 * Solves the optimization
-Solve HeatPump using LP minimizing TotalImport;
+Solve HeatPump using MIP minimizing TotalCost;
 
-Display HP.l, StoredHeat.l, GridDraw.l,
-        GridExport.l, TotalImport.l;
+Scalar TotalHP, TotalBought, TotalSold;
+
+TotalHP = sum(t, HP.l(t));
+TotalBought = sum(t, GridDraw.l(t));
+TotalSold = sum(t, GridExport.l(t));
+
+put_utility 'log' / 'TotalHP = ' TotalHP:12:2;
+put_utility 'log' / 'TotalBought = ' TotalBought:12:2;
+put_utility 'log' / 'TotalSold = ' TotalSold:12:2;
+
+put_utility 'log' / 'TotalCost = ' TotalCost.l:12:2;
+
+Display TotalCost.l;
+
+display price;
+
+Scalar AveragePrice;
+AveragePrice = sum(t, price(t)) / card(t);
+display AveragePrice;
+
+
+Scalar AveragePrice, MinPrice, MaxPrice;
+
+AveragePrice = sum(t, price(t)) / card(t);
+MinPrice = smin(t, price(t));
+MaxPrice = smax(t, price(t));
+
+put_utility 'log' / 'AveragePrice = ' AveragePrice:12:2;
+put_utility 'log' / 'MinPrice = ' MinPrice:12:2;
+put_utility 'log' / 'MaxPrice = ' MaxPrice:12:2;
