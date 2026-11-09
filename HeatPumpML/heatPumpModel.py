@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split  # deler opp dataen i test og verify
 from sklearn.metrics import mean_absolute_error, r2_score  # måle modellen
-
+# 3.14.6
 
 
 """
