@@ -45,10 +45,12 @@ prediction = prediction.set_index("time")
 prediction["predicted"] = prediction["predicted_power_W"] / 1000
 
 # Prepare spot price
-price["Time"] = pd.to_datetime(price["Time"])
-price["price"] = pd.to_numeric(
-    price["NOK/kWh.last"].str.replace("kr", "", regex=False)
+price["Time"] = pd.to_datetime(
+    price["Time"].str.replace(" Kl. ", " ", regex=False)
+                 .str.replace(r"-\d{2}$", "", regex=True),
+    format="%Y-%m-%d %H"
 )
+price["price"] = pd.to_numeric(price["NOK/kWh.last"])
 price = price.set_index("Time")
 
 # Combine data
