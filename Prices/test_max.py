@@ -4,17 +4,21 @@ import pandas as pd
 datafolder="Prices"
 
 #import data
+
 grid_io=pd.read_csv(os.path.join(datafolder, "AMS_import_export.csv")).rename(columns={"last_changed": "DateTime", "state": "Power"})
-grid_io["DateTime"] = pd.to_datetime(grid_io["DateTime"])
+
 
 #split into export and import
 grid_import=grid_io[grid_io["entity_id"]=="sensor.ams_linje6_p"]
 grid_export=grid_io[grid_io["entity_id"]=="sensor.ams_linje6_po"]
-
+#Compare data from grafana and homeassistant
+#grid_import=pd.read_csv(os.path.join(datafolder, "Grid_import.csv")).rename(columns={"Time":"DateTime","W.mean":"Power"})
+grid_import["DateTime"] = pd.to_datetime(grid_import["DateTime"])
 #find the peak reading in each clock hour.
 
+#grid_import["DateTime"] = pd.to_datetime(grid_import["DateTime"])
 def month_maxes(df, month, year ,nmax = 3):
-    """Return the maximum value for a given month in a DataFrame with time in DataTime column, and value in Power column"""
+    """Return the maximum nmax for a given month in a DataFrame with time in DataTime column, and value in Power column"""
     # Filter the DataFrame to the specified month
     df = df[df["DateTime"].dt.year == year]
     df = df[df["DateTime"].dt.month == month]
