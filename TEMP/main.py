@@ -1,6 +1,6 @@
 import pandas as pd 
 
-df = pd.read_csv("august_2026_konvertert.csv")
+df = pd.read_csv("exportcsv.txt")
 
 df["Time"] = pd.to_datetime(df["Time"])
 
@@ -21,3 +21,9 @@ for i in range(3):
     top3.append(highest)
 
 print(top3)
+
+#2026-08-31 04:00:00,5.4434
+#2026-08-03 05:00:00,4.7715
+#2026-08-07 04:00:00,4.5419
+# Fastledd "peak usage 5.4 kW" = 420 kr
+# 
