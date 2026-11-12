@@ -11,7 +11,7 @@ grid_io=pd.read_csv(os.path.join(datafolder, "AMS_import_export.csv")).rename(co
 #split into export and import
 grid_import=grid_io[grid_io["entity_id"]=="sensor.ams_linje6_p"]
 grid_export=grid_io[grid_io["entity_id"]=="sensor.ams_linje6_po"]
-#Compare data from grafana and homeassistant
+#Compare data from grafana and homeassistant by removing the comment here. 
 #grid_import=pd.read_csv(os.path.join(datafolder, "Grid_import.csv")).rename(columns={"Time":"DateTime","W.mean":"Power"})
 grid_import["DateTime"] = pd.to_datetime(grid_import["DateTime"])
 #find the peak reading in each clock hour.

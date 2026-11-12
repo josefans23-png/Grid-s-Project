@@ -4,6 +4,10 @@ import pandas as pd
 #File path
 datafolder = "Prices"
 
+"""
+Used for reading files from Entso-E and Norges Bank to find the 15 minute price in NOK/KWh for 15 minute periods
+"""
+
 #Read csv file, select columns and filter to NO1
 def read_prices(path):
     df = pd.read_csv(path, header=0,sep="\t",usecols=["DateTime(UTC)","AreaMapCode","Price[Currency/MWh]"])
@@ -45,9 +49,12 @@ exchange_rate["Date"] = pd.to_datetime(exchange_rate["DateTime"]).dt.normalize()
 prices = prices.merge(exchange_rate[["Date", "ExchangeRate"]], on="Date", how="left")
 prices["Price[NOK/kWh]"] = prices["Price[Currency/MWh]"] * prices["ExchangeRate"]/1000
 
+
+
+
 # Export timestamps without timezone information
-prices["DateTime"] = prices["DateTime"].dt.tz_localize(None)
-prices.to_csv(os.path.join(datafolder,"N01prices.csv"),columns=["DateTime","ExchangeRate","Price[NOK/kWh]"], index=False)
+#hourly_prices["DateTime"] = hourly_prices["DateTime"].dt.tz_localize(None)
+#hourly_prices.to_csv(os.path.join(datafolder,"N01prices_h.csv"),columns=["DateTime","ExchangeRate","Price[NOK/kWh]"], index=False)
 
 
 
